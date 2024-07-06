@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Processing with WebAssembly</title>
+    <script src="wasm_exec.js"></script>
+  </head>
+  <body>
+    <h1>Image Processing with WebAssembly</h1>
+    <input type="file" id="upload" accept="image/*" />
+
+    <h3>Processed Image:</h3>
+    <img
+      id="processed"
+      alt="Processed Image"
+      width="500px"
+      height="500px"
+      style="object-fit: cover"
+    />
+    <a href="./tiny/index.html">타이니 고 버전</a>
+    <script>
+      const go = new Go();
+      // 메인
+      WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject)
+        .then((result) => {
+          go.run(result.instance);
+
+          // Capture the console output
+          // const outputElement = document.getElementById("output");
+          // const originalConsoleLog = console.log;
+          // console.log = function (...args) {
+          //   originalConsoleLog(...args);
+          //   outputElement.textContent += args.join(" ") + "\n";
+          // };
+        })
+        .catch((err) => {
+          console.error(err);
+        });
+
+      WebAssembly.instantiateStreaming(
+        fetch("image_process.wasm"),
+        go.importObject
+      )
+        .then((result) => {
+          go.run(result.instance);
+        })
+        .then(() => {
+          document
+            .getElementById("upload")
+            .addEventListener("change", (event) => {
+              const file = event.target.files[0];
+              const base64Content = file.toString("base64");
+              const dataURL = `data:image/jpeg;base64,${base64Content}`;
+
+              const reader = new FileReader();
+              reader.onload = async function (e) {
+                const arrayBuffer = e.target.result;
+                const uint8Array = new Uint8Array(arrayBuffer);
+
+                const start = performance.now();
+                const result = await window.processImage(uint8Array);
+                const end = performance.now();
+
+                console.log(
+                  "WebAssembly 함수 호출 시간:",
+                  end - start,
+                  "밀리초"
+                );
+                const processedImg = document.getElementById("processed");
+
+                if (result.image) {
+                  const blob = new Blob([result.image], { type: "image/jpeg" }); // 이미지 타입에 맞게 수정
+                  const url = URL.createObjectURL(blob);
+                  processedImg.src = url;
+                } else if (result.error) {
+                  console.error(result.error);
+                }
+              };
+              reader.readAsArrayBuffer(file);
+            });
+        })
+        .catch((err) => {
+          console.error(err);
+        });
+    </script>
+  </body>
+</html>
